@@ -228,6 +228,19 @@ exports.skipSong = async (req, res) => {
   }
 };
 
+exports.previousSong = async (req, res) => {
+  try {
+    const previousSong = await RoomService.previousSong(req.params._id);
+    if (!previousSong)
+      return res
+        .status(404)
+        .json({ success: false, message: "No previous song" });
+    return res.json({ success: true, nowPlaying: previousSong });
+  } catch (e) {
+    res.status(500).json({ success: false });
+  }
+};
+
 exports.removeParticipant = async (req, res) => {
   try {
     const { userId } = req.body;

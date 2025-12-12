@@ -129,7 +129,7 @@ module.exports = {
 
       if (!alreadyExists) {
         room.songs.push(songData);
-         room.save();
+        room.save();
       }
 
       return room.songs; // return updated playlist
@@ -243,5 +243,22 @@ module.exports = {
 
     await room.save();
     return nextSong;
+  },
+
+  async previousSong(roomId) {
+    const room = await RoomModel.findById(roomId);
+
+    if (!room) return null;
+    const playlist = room.songs;
+    const current = room.nowPlaying;
+    if (!current) {
+      return null;
+    }
+    playlist.unshift(current);
+    const previousSong = playlist.pop();
+    room.nowPlaying = previousSong || null;
+    room.songs = playlist;
+    await room.save();
+    return previousSong;
   },
 };

@@ -16,5 +16,5 @@ router.post("/:_id/leave", controller.leaveRoom);
 router.delete("/:_id/songs/:title", controller.removeSong);
 router.post("/:_id/skip", controller.skipSong);
 router.post("/:_id/removeParticipant", controller.removeParticipant);
-
+router.post("/:_id/previous", controller.previousSong);
 module.exports = router;
