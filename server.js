@@ -60,15 +60,23 @@ io.on("connection", (socket) => {
 
   socket.on("add_song", async ({ roomId, song }) => {
     if (!roomId || !song) return;
-    const added = await RoomService.addSong(roomId, song);
-    const playlist = await RoomService.getPlaylist(roomId);
-    io.to(roomId).emit("playlist_updated", { playlist });
 
-    const now = await RoomService.getNowPlaying(roomId);
-    if (!now) {
-      await RoomService.setNowPlaying(roomId, added);
-      io.to(roomId).emit("now_playing", { nowPlaying: added });
+    const addedSong = await RoomService.addSong(roomId, song);
+    if (!addedSong) return;
+
+    let nowPlaying = await RoomService.getNowPlaying(roomId);
+
+    // If first song → auto play
+    if (!nowPlaying) {
+      await RoomService.setNowPlaying(roomId, addedSong);
+      nowPlaying = addedSong;
+
+      io.to(roomId).emit("now_playing", { nowPlaying });
     }
+
+    const playlist = await RoomService.getPlaylist(roomId);
+
+    io.to(roomId).emit("playlist_updated", { playlist });
   });
 
   socket.on("remove_song", async ({ roomId, title }) => {
@@ -78,13 +86,16 @@ io.on("connection", (socket) => {
   });
 
   socket.on("skip_song", async ({ roomId }) => {
-    if (!roomId) return;
+    const result = await RoomService.skipSong(roomId);
+    if (!result) return;
 
-    const { nowPlaying, playlist } = await RoomService.skipSong(roomId);
+    io.to(roomId).emit("now_playing", {
+      nowPlaying: result.nowPlaying,
+    });
 
-    // Broadcast update
-    io.to(roomId).emit("now_playing", { nowPlaying });
-    io.to(roomId).emit("playlist_updated", { playlist });
+    io.to(roomId).emit("playlist_updated", {
+      playlist: result.playlist,
+    });
   });
 
   // Host controls -> broadcast to room
