@@ -29,26 +29,37 @@ io.on("connection", (socket) => {
   console.log("socket connected", socket.id);
 
   socket.on("join_room", async ({ roomId, user }) => {
-    if (!roomId || !user)
+    if (!roomId || !user) {
       return socket.emit("error", { message: "invalid_payload" });
+    }
 
     const roomExists = await RoomService.checkRoomExists(roomId);
-    if (!roomExists) return socket.emit("error", { message: "room_not_found" });
+    if (!roomExists) {
+      return socket.emit("error", { message: "room_not_found" });
+    }
 
     socket.join(roomId);
-    await RoomService.addParticipant(roomId, user);
 
-    // emit participant updates to room
-    const participants = await RoomService.getParticipants(roomId);
-    io.to(roomId).emit("user_joined", {
+    await RoomService.addParticipant(roomId, {
       id: socket.id,
       name: user,
-      participants,
     });
 
-    // send full room state to the joining socket
+    // ✅ Single source of truth
     const state = await RoomService.getRoomState(roomId);
-    socket.emit("room_state", state);
+
+    // 🔥 Send to EVERYONE in room (including new user)
+    io.to(roomId).emit("room_state", state);
+  });
+
+  socket.on("set_now_playing", async ({ roomId, song }) => {
+    if (!roomId || !song) return;
+
+    const nowPlaying = await RoomService.setNowPlaying(roomId, song);
+    if (!nowPlaying) return;
+
+    const state = await RoomService.getRoomState(roomId);
+    io.to(roomId).emit("room_state", state);
   });
 
   socket.on("leave_room", async ({ roomId, userId }) => {
@@ -56,7 +67,7 @@ io.on("connection", (socket) => {
     await RoomService.removeParticipant(roomId, userId);
     const participants = await RoomService.getParticipants(roomId);
     socket.leave(roomId);
-    io.to(roomId).emit("user_left", { id: socket.id, participants });
+    io.to(roomId).emit("participants_updated", { participants });
   });
 
   socket.on("add_song", async ({ roomId, song }) => {
@@ -87,15 +98,26 @@ io.on("connection", (socket) => {
   });
 
   socket.on("skip_song", async ({ roomId }) => {
+    if (!roomId) return;
+
     const result = await RoomService.skipSong(roomId);
     if (!result) return;
 
-    io.to(roomId).emit("now_playing", {
+    io.to(roomId).emit("room_state", {
       nowPlaying: result.nowPlaying,
+      songs: result.playlist,
     });
+  });
 
-    io.to(roomId).emit("playlist_updated", {
-      playlist: result.playlist,
+  socket.on("previous_song", async ({ roomId }) => {
+    if (!roomId) return;
+
+    const result = await RoomService.previousSong(roomId);
+    if (!result) return;
+
+    io.to(roomId).emit("room_state", {
+      nowPlaying: result.nowPlaying,
+      songs: result.playlist,
     });
   });
 

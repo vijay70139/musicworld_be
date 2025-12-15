@@ -145,14 +145,13 @@ module.exports = {
     return r ? r.songs || [] : [];
   },
 
-  async setNowPlaying(roomId, title) {
+  async setNowPlaying(roomId, song) {
     try {
-      const room = await RoomModel.findOne({ _id: roomId });
-
+      const room = await RoomModel.findById(roomId);
       if (!room) return null;
 
       const songObj = room.songs.find(
-        (song) => song.title.toLowerCase() === title.toLowerCase()
+        (s) => s._id.toString() === song._id.toString()
       );
       if (!songObj) return null;
 
@@ -223,48 +222,29 @@ module.exports = {
 
   async skipSong(roomId) {
     const room = await RoomModel.findById(roomId);
-
     if (!room || !room.songs.length) return null;
 
     const songs = room.songs;
     const current = room.nowPlaying;
 
-    // ▶ Nothing playing → start from first song
-    if (!current) {
-      room.nowPlaying = songs[0];
-      await room.save();
+    let nextIndex = 0;
 
-      return {
-        nowPlaying: songs[0],
-        playlist: songs,
-      };
+    if (current) {
+      const currentIndex = songs.findIndex(
+        (s) => s._id.toString() === current._id.toString()
+      );
+
+      if (currentIndex !== -1) {
+        nextIndex = currentIndex === songs.length - 1 ? 0 : currentIndex + 1;
+      }
     }
 
-    // Find current index
-    const currentIndex = songs.findIndex(
-      (s) => s._id.toString() === current._id.toString()
-    );
-
-    let nextIndex;
-
-    if (currentIndex === -1) {
-      // current song was deleted
-      nextIndex = 0;
-    } else if (currentIndex === songs.length - 1) {
-      // wrap to start
-      nextIndex = 0;
-    } else {
-      nextIndex = currentIndex + 1;
-    }
-
-    const nextSong = songs[nextIndex];
-
-    room.nowPlaying = nextSong;
+    room.nowPlaying = songs[nextIndex];
     await room.save();
 
     return {
-      nowPlaying: nextSong,
-      playlist: songs,
+      nowPlaying: room.nowPlaying,
+      playlist: room.songs,
     };
   },
 
@@ -272,64 +252,41 @@ module.exports = {
     try {
       const room = await RoomModel.findById(roomId);
 
-      if (!room) {
-        console.log("❌ Room not found");
-        return null;
-      }
-
-      if (!room.songs || room.songs.length === 0) {
-        console.log("❌ No songs in playlist");
-        return null;
-      }
+      if (!room || !room.songs?.length) return null;
 
       const songs = room.songs;
       const current = room.nowPlaying;
-      console.log("current: ", current);
 
-      // ▶ If nothing is playing → play LAST song
+      // ▶ Nothing playing → play LAST song
       if (!current) {
-        const lastSong = songs[songs.length - 1];
-        room.nowPlaying = lastSong;
+        room.nowPlaying = songs[songs.length - 1];
         await room.save();
 
         return {
-          nowPlaying: lastSong,
+          nowPlaying: room.nowPlaying,
           playlist: songs,
         };
       }
 
-      // 🔑 VERY IMPORTANT: compare safely
       const currentIndex = songs.findIndex(
         (s) => s._id?.toString() === current._id?.toString()
       );
 
-      // ▶ If current song was deleted or not found
-      let prevIndex;
-      if (currentIndex === -1) {
-        prevIndex = songs.length - 1;
-      } else if (currentIndex === 0) {
-        prevIndex = songs.length - 1;
-      } else {
-        prevIndex = currentIndex - 1;
-      }
+      const prevIndex =
+        currentIndex <= 0 || currentIndex === -1
+          ? songs.length - 1
+          : currentIndex - 1;
 
-      const previousSong = songs[prevIndex];
-
-      if (!previousSong) {
-        console.log("❌ Previous song resolved as undefined");
-        return null;
-      }
-
-      room.nowPlaying = previousSong;
+      room.nowPlaying = songs[prevIndex];
       await room.save();
 
       return {
-        nowPlaying: previousSong,
+        nowPlaying: room.nowPlaying,
         playlist: songs,
       };
     } catch (err) {
-      console.error("🔥 previousSong error:", err);
-      throw err; // this causes 500 → now you'll see REAL error in logs
+      console.error("🔥 previousSong error:", err.message);
+      return null;
     }
   },
 };
