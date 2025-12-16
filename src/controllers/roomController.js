@@ -262,3 +262,12 @@ exports.removeParticipant = async (req, res) => {
     res.status(500).json({ success: false });
   }
 };
+
+exports.getAllSongs = async (req, res) => {
+  try {
+    const songs = await RoomService.getAllSongs();
+    return res.json({ success: true, songs });
+  } catch (e) {
+    res.status(500).json({ success: false });
+  }
+};

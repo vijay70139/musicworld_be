@@ -6,6 +6,8 @@ const mongoose = require("mongoose");
 const { Server } = require("socket.io");
 const roomsRouter = require("./src/routes/roomRoutes");
 const RoomService = require("./src/services/roomService");
+const RoomModel = require("./src/models/Room");
+const SongModel = require("./src/models/Song");
 
 const app = express();
 app.use(cors({ origin: process.env.CORS_ORIGIN || "*" }));
@@ -40,10 +42,7 @@ io.on("connection", (socket) => {
 
     socket.join(roomId);
 
-    await RoomService.addParticipant(roomId, {
-      id: socket.id,
-      name: user,
-    });
+    await RoomService.addParticipant(roomId, user);
 
     // ✅ Single source of truth
     const state = await RoomService.getRoomState(roomId);
@@ -71,24 +70,58 @@ io.on("connection", (socket) => {
   });
 
   socket.on("add_song", async ({ roomId, song }) => {
-    if (!roomId || !song) return;
+    try {
+      const room = await RoomModel.findById(roomId);
+      if (!room) return;
 
-    const addedSong = await RoomService.addSong(roomId, song);
-    if (!addedSong) return;
+      // 1️⃣ Ensure song exists globally
+      let existingSong = await SongModel.findOne({ url: song.url });
 
-    let nowPlaying = await RoomService.getNowPlaying(roomId);
+      if (!existingSong) {
+        existingSong = await SongModel.create(song);
+      }
 
-    // If first song → auto play
-    if (!nowPlaying) {
-      await RoomService.setNowPlaying(roomId, addedSong);
-      nowPlaying = addedSong;
+      // 2️⃣ Prevent duplicate in same room
+      const alreadyInRoom = room.songs.some(
+        (id) => id.toString() === existingSong._id.toString()
+      );
 
-      io.to(roomId).emit("now_playing", { nowPlaying });
+      if (alreadyInRoom) {
+        return socket.emit("error", {
+          type: "SONG_ALREADY_IN_ROOM",
+          message: "Song already exists in this room",
+        });
+      }
+
+      // 3️⃣ Add to room playlist
+      room.songs.push(existingSong._id);
+
+      // 4️⃣ Auto set nowPlaying if empty
+      if (!room.nowPlaying) {
+        room.nowPlaying = existingSong._id;
+      }
+
+      await room.save();
+
+      // 5️⃣ Emit updated state
+      const populatedRoom = await RoomModel.findById(roomId)
+        .populate("songs")
+        .populate("nowPlaying");
+
+      io.to(roomId).emit("playlist_updated", {
+        playlist: populatedRoom.songs,
+      });
+
+      io.to(roomId).emit("now_playing", {
+        nowPlaying: populatedRoom.nowPlaying,
+      });
+    } catch (err) {
+      console.error("add_song socket error:", err);
+      socket.emit("error", {
+        type: "ADD_SONG_FAILED",
+        message: "Failed to add song",
+      });
     }
-
-    const playlist = await RoomService.getPlaylist(roomId);
-
-    io.to(roomId).emit("playlist_updated", { playlist });
   });
 
   socket.on("remove_song", async ({ roomId, title }) => {
@@ -121,7 +154,6 @@ io.on("connection", (socket) => {
     });
   });
 
-  // Host controls -> broadcast to room
   socket.on("play", ({ roomId, at }) => io.to(roomId).emit("play", { at }));
   socket.on("pause", ({ roomId, at }) => io.to(roomId).emit("pause", { at }));
   socket.on("seek", ({ roomId, position }) =>
@@ -131,6 +163,34 @@ io.on("connection", (socket) => {
   socket.on("sync_request", async ({ roomId }) => {
     const state = await RoomService.getRoomState(roomId);
     socket.emit("room_state", state);
+  });
+
+  socket.on("add_song_to_room", async ({ roomId, songId }) => {
+    const room = await RoomModel.findById(roomId);
+    if (!room) return;
+
+    const exists = room.songs.some((id) => id.toString() === songId);
+
+    if (!exists) {
+      room.songs.push(songId);
+      await room.save();
+    }
+
+    const populatedRoom = await RoomModel.findById(roomId)
+      .populate("songs")
+      .populate("nowPlaying");
+    console.log(populatedRoom, "populatedRoom");
+
+    // If nothing playing → auto start
+    if (!populatedRoom.nowPlaying && populatedRoom.songs.length) {
+      populatedRoom.nowPlaying = populatedRoom.songs[0]._id;
+      await populatedRoom.save();
+    }
+
+    io.to(roomId).emit("room_state", {
+      songs: populatedRoom.songs,
+      nowPlaying: populatedRoom.nowPlaying,
+    });
   });
 
   socket.on("disconnect", async () => {
@@ -160,3 +220,7 @@ async function start() {
   server.listen(PORT, () => console.log(`Server listening on ${PORT}`));
 }
 start();
+
+process.on("uncaughtException", (err) => {
+  console.error(err);
+});

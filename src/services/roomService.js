@@ -1,4 +1,5 @@
 const RoomModel = require("../models/Room");
+const Song = require("../models/Song");
 
 let io = null;
 
@@ -62,36 +63,27 @@ module.exports = {
 
   async addParticipant(roomId, user) {
     try {
-      let isUserAdded = null;
-      let newParticipantAdded = null;
-      const room = await RoomModel.findById(roomId);
-      console.log("room: ", room);
+      const room = await RoomModel.findById(roomId); // ❗ NO populate
 
-      if (!room) return null; // ❌ Room not found
+      if (!room) return null;
 
-      // Generate unique participant ID
-      const newParticipant = {
-        user: user,
-      };
-
-      // Avoid duplicate join
       const alreadyExists = room.participants.some(
         (p) => p.user.toLowerCase() === user.toLowerCase()
       );
 
       if (!alreadyExists) {
-        room.participants.push(newParticipant);
-        await room.save();
-        isUserAdded = true;
-        newParticipantAdded = newParticipant;
-      } else {
-        isUserAdded = false;
+        room.participants.push({ user });
+        await room.save(); // ✅ songs are still ObjectIds
       }
 
-      return { room, isUserAdded, newParticipantAdded }; // ✔ sends updated list
+      return {
+        room: room.toObject(),
+        isUserAdded: !alreadyExists,
+        newParticipantAdded: alreadyExists ? null : { user },
+      };
     } catch (err) {
-      console.error("addParticipant Service Error:", err.message);
-      return null;
+      console.error("addParticipant Service Error:", err);
+      throw err;
     }
   },
 
@@ -288,5 +280,10 @@ module.exports = {
       console.error("🔥 previousSong error:", err.message);
       return null;
     }
+  },
+
+  async getAllSongs() {
+    const songs = await Song.find().lean();
+    return songs;
   },
 };

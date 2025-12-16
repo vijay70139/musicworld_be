@@ -1,11 +1,5 @@
 const mongoose = require("mongoose");
 
-const SongSchema = new mongoose.Schema({
-  url: String,
-  title: String,
-  duration: Number,
-});
-
 const ParticipantSchema = new mongoose.Schema({
   user: { type: String, required: true },
 });
@@ -13,8 +7,12 @@ const ParticipantSchema = new mongoose.Schema({
 const RoomSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
-    songs: { type: [SongSchema], default: [] },
-    nowPlaying: { type: SongSchema, default: null },
+    songs: [{ type: mongoose.Schema.Types.ObjectId, ref: "Song" }],
+    nowPlaying: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Song",
+      default: null,
+    },
     participants: { type: [ParticipantSchema], default: [] },
   },
   { timestamps: true }
