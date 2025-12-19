@@ -45,7 +45,11 @@ module.exports = {
 
   async getRoom(roomId) {
     try {
-      const r = await RoomModel.findOne({ _id: roomId }).lean();
+      const r = await RoomModel.findOne({ _id: roomId })
+        .populate("songs")
+        .populate("nowPlaying")
+        .lean();
+        console.log("getRoom found:", r);
       if (r) return r;
     } catch (err) {}
     console.log("getRoom", err?.message);
