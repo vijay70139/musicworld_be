@@ -135,11 +135,8 @@ io.on("connection", (socket) => {
 
     const result = await RoomService.skipSong(roomId);
     if (!result) return;
-
-    io.to(roomId).emit("room_state", {
-      nowPlaying: result.nowPlaying,
-      songs: result.playlist,
-    });
+    const state = await RoomService.getRoomState(roomId);
+    io.to(roomId).emit("room_state", state);
   });
 
   socket.on("previous_song", async ({ roomId }) => {
@@ -183,7 +180,7 @@ io.on("connection", (socket) => {
 
     // If nothing playing → auto start
     if (!populatedRoom.nowPlaying && populatedRoom.songs.length) {
-      populatedRoom.nowPlaying = populatedRoom.songs[0]._id;
+      populatedRoom.nowPlaying = populatedRoom.songs[0];
       await populatedRoom.save();
     }
 
