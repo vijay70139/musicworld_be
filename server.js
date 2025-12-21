@@ -8,6 +8,7 @@ const roomsRouter = require("./src/routes/roomRoutes");
 const RoomService = require("./src/services/roomService");
 const RoomModel = require("./src/models/Room");
 const SongModel = require("./src/models/Song");
+const userRoutes = require("./src/routes/userRoutes");
 
 const app = express();
 app.use(cors({ origin: process.env.CORS_ORIGIN || "*" }));
@@ -15,6 +16,7 @@ app.use(express.json());
 
 // REST endpoints
 app.use("/api/rooms", roomsRouter);
+app.use("/api/user", userRoutes);
 
 // HTTP + Socket.IO
 const server = http.createServer(app);
