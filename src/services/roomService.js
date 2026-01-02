@@ -49,7 +49,7 @@ module.exports = {
         .populate("songs")
         .populate("nowPlaying")
         .lean();
-        console.log("getRoom found:", r);
+      console.log("getRoom found:", r);
       if (r) return r;
     } catch (err) {}
     console.log("getRoom", err?.message);
@@ -289,5 +289,50 @@ module.exports = {
   async getAllSongs() {
     const songs = await Song.find().lean();
     return songs;
+  },
+
+  async addMultipleSongsToRoom(roomId, songIds) {
+    const room = await RoomModel.findById(roomId);
+
+    if (!room) return null;
+
+    // Convert existing song ObjectIds to string for comparison
+    const existingSongIds = room.songs.map((id) => id.toString());
+
+    let addedCount = 0;
+    let skippedCount = 0;
+
+    for (const songId of songIds) {
+      // Validate song exists
+      const songExists = await Song.exists({ _id: songId });
+      if (!songExists) {
+        skippedCount++;
+        continue;
+      }
+
+      // Skip duplicates
+      if (existingSongIds.includes(songId.toString())) {
+        skippedCount++;
+        continue;
+      }
+
+      room.songs.push(songId);
+      addedCount++;
+    }
+
+    await room.save();
+
+    // Populate songs for frontend
+    const updatedRoom = await RoomModel.findById(roomId)
+      .populate("songs")
+      .populate("nowPlaying")
+      .lean();
+
+    return {
+      playlist: updatedRoom.songs,
+      nowPlaying: updatedRoom.nowPlaying,
+      addedCount,
+      skippedCount,
+    };
   },
 };

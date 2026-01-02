@@ -192,6 +192,46 @@ io.on("connection", (socket) => {
     });
   });
 
+  socket.on("add_multiple_songs_to_room", async ({ roomId, songIds }) => {
+    try {
+      if (!roomId || !Array.isArray(songIds) || songIds.length === 0) {
+        return socket.emit("error", {
+          message: "Invalid payload",
+        });
+      }
+
+      const result = await RoomService.addMultipleSongsToRoom(roomId, songIds);
+
+      if (!result) {
+        return socket.emit("error", {
+          message: "Room not found",
+        });
+      }
+
+      const { playlist, addedCount, skippedCount, nowPlaying } = result;
+
+      // 🔔 Broadcast updated playlist
+      io.to(roomId).emit("playlist_updated", {
+        playlist,
+      });
+
+      // Optional feedback event
+      socket.emit("songs_added_result", {
+        addedCount,
+        skippedCount,
+      });
+      io.to(roomId).emit("room_state", {
+        songs: playlist,
+        nowPlaying: nowPlaying,
+      });
+    } catch (err) {
+      console.error("🔥 add_multiple_songs_to_room error:", err);
+      socket.emit("error", {
+        message: "Failed to add songs",
+      });
+    }
+  });
+
   socket.on("disconnect", async () => {
     // Best-effort: remove participant from all rooms and broadcast
     await RoomService.removeParticipantFromAll(socket.id);
