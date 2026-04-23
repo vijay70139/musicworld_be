@@ -11,10 +11,12 @@ exports.verifyUser = async (req, res) => {
       });
     }
 
-    // Check if user already exists
-    let user = await User.findOne({
-      name: name.trim().toLowerCase(),
-    });
+    // Check if user already exists and increment verify counter
+    let user = await User.findOneAndUpdate(
+      { name: name.trim().toLowerCase() },
+      { $inc: { verifyCount: 1 } },
+      { new: true }
+    );
 
     if (!user) {
       return res.json({

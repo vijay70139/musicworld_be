@@ -7,6 +7,11 @@ const UserSchema = new mongoose.Schema(
       required: true,
       unique: true,
       trim: true,
+      lowercase: true,
+    },
+    verifyCount: {
+      type: Number,
+      default: 0,
     },
   },
   { timestamps: true }
